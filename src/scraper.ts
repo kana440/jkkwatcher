@@ -36,13 +36,22 @@ async function runWithNode(
   const runnerPath = join(process.cwd(), 'src', 'scraper-runner.ts');
   const configJson = JSON.stringify(searchConfig);
 
-  // npx tsx を使用して TypeScript を直接実行
-  const result = spawnSync('npx', ['tsx', runnerPath, configJson, String(headless)], {
+  console.log('[DEBUG] Runner path:', runnerPath);
+  console.log('[DEBUG] Config:', configJson.substring(0, 100) + '...');
+
+  // Windows では npx.cmd を使う
+  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+  const result = spawnSync(npxCmd, ['tsx', runnerPath, configJson, String(headless)], {
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
-    shell: true,
+    shell: false,  // shell: false で直接実行
     cwd: process.cwd(),
+    timeout: 120000, // 2分タイムアウト
+    windowsHide: false,
   });
+
+  console.log('[DEBUG] spawnSync completed');
 
   if (result.error) {
     return {
