@@ -1,10 +1,15 @@
-import { chromium, type Browser, type Page } from 'playwright';
+#!/usr/bin/env node
+/**
+ * Playwright スクレイパーを Node.js で実行するためのラッパー
+ * Windows環境でBunがPlaywrightを正しく起動できない問題の回避策
+ */
+
+import { chromium } from 'playwright';
 import type { SearchConfig } from './config';
 import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
-import { spawnSync } from 'child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 
-export interface ScrapeResult {
+interface ScrapeResult {
   success: boolean;
   found: boolean;
   message: string;
@@ -15,94 +20,16 @@ export interface ScrapeResult {
 const LOGS_DIR = join(process.cwd(), 'logs');
 const TARGET_URL = 'https://jhomes.to-kousya.or.jp/search/jkknet/service/akiyaJyoukenStartInit';
 
-/**
- * Windows + Bun環境かどうかを判定
- */
-function shouldUseNodeRunner(): boolean {
-  const isWindows = process.platform === 'win32';
-  const isBun = typeof (globalThis as any).Bun !== 'undefined';
-  return isWindows && isBun;
-}
-
-/**
- * Node.js で別プロセスとしてスクレイパーを実行 (Windows + Bun 環境用)
- */
-async function runWithNode(
-  searchConfig: SearchConfig,
-  headless: boolean
-): Promise<ScrapeResult> {
-  console.log('[Windows] Node.js でスクレイパーを実行します...');
-
-  const runnerPath = join(process.cwd(), 'src', 'scraper-runner.ts');
-  const configJson = JSON.stringify(searchConfig);
-
-  // npx tsx を使用して TypeScript を直接実行
-  const result = spawnSync('npx', ['tsx', runnerPath, configJson, String(headless)], {
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-    shell: true,
-    cwd: process.cwd(),
-  });
-
-  if (result.error) {
-    return {
-      success: false,
-      found: false,
-      message: 'Node.js の実行に失敗しました',
-      error: result.error.message,
-    };
-  }
-
-  // 標準出力から結果を抽出
-  const stdout = result.stdout || '';
-  console.log(stdout);
-
-  const startMarker = '__RESULT_START__';
-  const endMarker = '__RESULT_END__';
-  const startIdx = stdout.indexOf(startMarker);
-  const endIdx = stdout.indexOf(endMarker);
-
-  if (startIdx === -1 || endIdx === -1) {
-    return {
-      success: false,
-      found: false,
-      message: 'スクレイパーの結果を取得できませんでした',
-      error: result.stderr || 'No result markers found',
-    };
-  }
-
-  const jsonStr = stdout.slice(startIdx + startMarker.length, endIdx).trim();
-  try {
-    return JSON.parse(jsonStr);
-  } catch {
-    return {
-      success: false,
-      found: false,
-      message: '結果のパースに失敗しました',
-      error: jsonStr,
-    };
-  }
-}
-
-/**
- * 都営住宅の空き物件を検索する
- */
-export async function searchAvailableProperty(
+async function searchAvailableProperty(
   searchConfig: SearchConfig,
   headless: boolean = true
 ): Promise<ScrapeResult> {
-  // Windows + Bun 環境では Node.js で実行
-  if (shouldUseNodeRunner()) {
-    return runWithNode(searchConfig, headless);
-  }
-
-  // logsディレクトリを作成
   if (!existsSync(LOGS_DIR)) {
     mkdirSync(LOGS_DIR, { recursive: true });
   }
 
-  let browser: Browser | null = null;
-  let page: Page | null = null;
+  let browser = null;
+  let page = null;
 
   try {
     console.log('ブラウザを起動しています...');
@@ -122,7 +49,6 @@ export async function searchAvailableProperty(
     console.log('検索ページにアクセスしています...');
     await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded' });
 
-    // 新しいタブが開くのを待つ
     await page.waitForTimeout(2000);
 
     const pages = context.pages();
@@ -130,24 +56,19 @@ export async function searchAvailableProperty(
       page = pages[pages.length - 1]!;
     }
 
-    // ページがロードされるまで待つ
     await page.waitForLoadState('domcontentloaded');
 
     console.log('検索条件を入力しています...');
 
-    // 物件名（カナ）を入力
     const propertyInput = await page.waitForSelector('input[name="akiyaInitRM.akiyaRefM.jyutakuKanaName"]');
     await propertyInput!.fill(searchConfig.kana_name);
 
-    // 階層を入力
     const kaisoInput = await page.waitForSelector('input[name="akiyaInitRM.akiyaRefM.kaisoFrom"]');
     await kaisoInput!.fill(searchConfig.kaiso_from);
 
-    // 床面積を選択
     const mensekiSelect = await page.waitForSelector('select[name="akiyaInitRM.akiyaRefM.mensekiFrom"]');
     await mensekiSelect!.selectOption({ label: searchConfig.menseki_from });
 
-    // 間取りのチェックボックスを設定
     const madoriCheckboxes = await page.$$('input[name="akiyaInitRM.akiyaRefM.madoris"]');
     const madoriValues = [
       searchConfig.madori.madori_1R1K_1LDK,
@@ -159,26 +80,21 @@ export async function searchAvailableProperty(
     for (let i = 0; i < madoriCheckboxes.length && i < madoriValues.length; i++) {
       const checkbox = madoriCheckboxes[i];
       const shouldBeChecked = madoriValues[i];
-      if (!checkbox) continue;
-      const isChecked = await checkbox.isChecked();
+      const isChecked = await checkbox!.isChecked();
 
       if (isChecked !== shouldBeChecked) {
-        await checkbox.click();
+        await checkbox!.click();
       }
     }
 
     console.log('検索を実行しています...');
 
     const searchButton = page.locator('[name="Image1"]').first();
-    console.log('検索ボタンをクリックします...');
     await searchButton.click({ timeout: 30000 });
-    console.log('検索ボタンのクリックが完了しました');
 
-    // 検索結果を待つ
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(2000);
 
-    // エラーメッセージ（見つかりません）があるかチェック
     try {
       const errorMessage = await page.waitForSelector('.error', { timeout: 3000 });
       if (errorMessage) {
@@ -194,13 +110,11 @@ export async function searchAvailableProperty(
       // エラーメッセージが見つからない = 物件が見つかった
     }
 
-    // 物件が見つかった場合、スクリーンショットを保存
     console.log('物件が見つかりました！スクリーンショットを保存しています...');
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const screenshotPath = join(LOGS_DIR, `property_${timestamp}.png`);
 
-    // ページ全体のスクリーンショットを撮る
     const totalHeight = await page.evaluate(() => {
       return Math.max(
         document.body.scrollHeight,
@@ -238,3 +152,28 @@ export async function searchAvailableProperty(
     };
   }
 }
+
+// メイン処理
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (args.length < 1) {
+    console.error('Usage: node scraper-runner.js <config-json> [headless]');
+    process.exit(1);
+  }
+
+  const searchConfig: SearchConfig = JSON.parse(args[0]);
+  const headless = args[1] !== 'false';
+
+  const result = await searchAvailableProperty(searchConfig, headless);
+
+  // 結果をJSONで標準出力
+  console.log('__RESULT_START__');
+  console.log(JSON.stringify(result));
+  console.log('__RESULT_END__');
+}
+
+main().catch((error) => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});
