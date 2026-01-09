@@ -1,41 +1,84 @@
 import { startServer } from './src/server';
-import { $ } from 'bun';
+import { exec } from 'child_process';
 
 console.log(`
-╔══════════════════════════════════════╗
-║   JKK Watcher - 都営住宅監視システム   ║
-╚══════════════════════════════════════╝
+==================================
+  JKK Watcher - 都営住宅監視システム
+==================================
 `);
 
 const PORT = 3000;
+
+/**
+ * sleep関数
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * コマンドを実行してPromiseを返す
+ */
+function execCommand(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve) => {
+    exec(command, (error, stdout, stderr) => {
+      resolve({
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
+        exitCode: error ? error.code || 1 : 0,
+      });
+    });
+  });
+}
 
 /**
  * ポート3000を使用しているプロセスをチェック
  */
 async function checkPortInUse(): Promise<{ inUse: boolean; pid?: number; isOurProcess?: boolean }> {
   try {
-    // lsofコマンドでポート3000を使用しているプロセスを確認
-    const result = await $`lsof -ti:${PORT}`.quiet().nothrow();
+    const isWindows = process.platform === 'win32';
 
-    if (result.exitCode !== 0 || !result.stdout.toString().trim()) {
+    if (isWindows) {
+      // Windowsの場合
+      const result = await execCommand(`netstat -ano | findstr :${PORT}`);
+      if (result.exitCode !== 0 || !result.stdout.trim()) {
+        return { inUse: false };
+      }
+
+      // PIDを抽出
+      const lines = result.stdout.trim().split('\n');
+      for (const line of lines) {
+        if (line.includes('LISTENING')) {
+          const parts = line.trim().split(/\s+/);
+          const pid = parseInt(parts[parts.length - 1] || '0');
+          if (!isNaN(pid)) {
+            return { inUse: true, pid };
+          }
+        }
+      }
       return { inUse: false };
+    } else {
+      // macOS/Linuxの場合
+      const result = await execCommand(`lsof -ti:${PORT}`);
+
+      if (result.exitCode !== 0 || !result.stdout.trim()) {
+        return { inUse: false };
+      }
+
+      const pid = parseInt(result.stdout.trim());
+
+      // プロセス情報を取得
+      const processInfo = await execCommand(`ps -p ${pid} -o command=`);
+
+      if (processInfo.exitCode === 0) {
+        const command = processInfo.stdout.trim();
+        const isOurProcess = command.includes('index.ts') || command.includes('jkkwatcher');
+        return { inUse: true, pid, isOurProcess };
+      }
+
+      return { inUse: true, pid };
     }
-
-    const pid = parseInt(result.stdout.toString().trim());
-
-    // プロセス情報を取得
-    const processInfo = await $`ps -p ${pid} -o command=`.quiet().nothrow();
-
-    if (processInfo.exitCode === 0) {
-      const command = processInfo.stdout.toString().trim();
-      // JKK Watcherのプロセスかチェック
-      const isOurProcess = command.includes('index.ts') || command.includes('jkkwatcher');
-      return { inUse: true, pid, isOurProcess };
-    }
-
-    return { inUse: true, pid };
   } catch (error) {
-    // lsofが使えない環境の場合はスキップ
     return { inUse: false };
   }
 }
@@ -50,7 +93,6 @@ async function promptUser(message: string, choices: string[]): Promise<string> {
   });
   console.log();
 
-  // 標準入力から読み取り
   const input = await new Promise<string>((resolve) => {
     process.stdin.once('data', (data) => {
       resolve(data.toString().trim());
@@ -65,22 +107,33 @@ async function promptUser(message: string, choices: string[]): Promise<string> {
  */
 async function killProcess(pid: number): Promise<boolean> {
   try {
-    console.log('🔄 既存プロセスを停止しています...');
-    await $`kill ${pid}`.quiet().nothrow();
-    await Bun.sleep(2000);
+    console.log('既存プロセスを停止しています...');
+    const isWindows = process.platform === 'win32';
 
-    // まだ動いているか確認
-    const stillRunning = await $`lsof -ti:${PORT}`.quiet().nothrow();
-    if (stillRunning.exitCode === 0 && stillRunning.stdout.toString().trim()) {
-      console.log('⚠️  プロセスが停止しないため、強制終了します...');
-      await $`kill -9 ${pid}`.quiet().nothrow();
-      await Bun.sleep(1000);
+    if (isWindows) {
+      await execCommand(`taskkill /PID ${pid} /F`);
+    } else {
+      await execCommand(`kill ${pid}`);
     }
 
-    console.log('✅ 既存プロセスを停止しました');
+    await sleep(2000);
+
+    // まだ動いているか確認
+    const stillRunning = await checkPortInUse();
+    if (stillRunning.inUse) {
+      console.log('プロセスが停止しないため、強制終了します...');
+      if (isWindows) {
+        await execCommand(`taskkill /PID ${pid} /F`);
+      } else {
+        await execCommand(`kill -9 ${pid}`);
+      }
+      await sleep(1000);
+    }
+
+    console.log('既存プロセスを停止しました');
     return true;
   } catch (error) {
-    console.error('❌ プロセスの停止に失敗しました:', error);
+    console.error('プロセスの停止に失敗しました:', error);
     return false;
   }
 }
@@ -93,7 +146,7 @@ async function main() {
 
   if (portCheck.inUse) {
     if (portCheck.isOurProcess) {
-      console.log(`⚠️  JKK Watcherは既に起動中です (PID: ${portCheck.pid})`);
+      console.log(`JKK Watcherは既に起動中です (PID: ${portCheck.pid})`);
       console.log();
 
       const choice = await promptUser('選択してください:', [
@@ -104,30 +157,30 @@ async function main() {
 
       switch (choice) {
         case '1':
-          console.log('✅ 既存のプロセスを継続します');
-          console.log(`🌐 ブラウザで http://localhost:${PORT} を開いてください`);
+          console.log('既存のプロセスを継続します');
+          console.log(`ブラウザで http://localhost:${PORT} を開いてください`);
           process.exit(0);
 
         case '2':
           const killed = await killProcess(portCheck.pid!);
           if (!killed) {
-            console.log('❌ プロセスの停止に失敗しました');
+            console.log('プロセスの停止に失敗しました');
             process.exit(1);
           }
-          console.log('🚀 JKK Watcherを起動します...');
+          console.log('JKK Watcherを起動します...');
           console.log();
           break;
 
         case '3':
-          console.log('❌ キャンセルしました');
+          console.log('キャンセルしました');
           process.exit(0);
 
         default:
-          console.log('❌ 無効な選択です');
+          console.log('無効な選択です');
           process.exit(1);
       }
     } else {
-      console.log(`⚠️  ポート${PORT}は別のプログラムが使用中です (PID: ${portCheck.pid})`);
+      console.log(`ポート${PORT}は別のプログラムが使用中です (PID: ${portCheck.pid})`);
       console.log();
 
       const choice = await promptUser('このプロセスを停止しますか?', [
@@ -138,18 +191,18 @@ async function main() {
       if (choice === '1') {
         const killed = await killProcess(portCheck.pid!);
         if (!killed) {
-          console.log('❌ プロセスの停止に失敗しました');
+          console.log('プロセスの停止に失敗しました');
           process.exit(1);
         }
-        console.log('🚀 JKK Watcherを起動します...');
+        console.log('JKK Watcherを起動します...');
         console.log();
       } else {
-        console.log('❌ キャンセルしました');
+        console.log('キャンセルしました');
         process.exit(0);
       }
     }
   } else {
-    console.log('🚀 JKK Watcherを起動します...');
+    console.log('JKK Watcherを起動します...');
     console.log();
   }
 

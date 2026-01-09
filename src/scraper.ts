@@ -2,7 +2,6 @@ import { chromium, type Browser, type Page } from 'playwright';
 import type { SearchConfig } from './config';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import { spawnSync } from 'child_process';
 
 export interface ScrapeResult {
   success: boolean;
@@ -16,105 +15,12 @@ const LOGS_DIR = join(process.cwd(), 'logs');
 const TARGET_URL = 'https://jhomes.to-kousya.or.jp/search/jkknet/service/akiyaJyoukenStartInit';
 
 /**
- * Windows + Bun環境かどうかを判定
- */
-function shouldUseNodeRunner(): boolean {
-  const isWindows = process.platform === 'win32';
-  const isBun = typeof (globalThis as any).Bun !== 'undefined';
-  return isWindows && isBun;
-}
-
-/**
- * Node.js で別プロセスとしてスクレイパーを実行 (Windows + Bun 環境用)
- */
-async function runWithNode(
-  searchConfig: SearchConfig,
-  headless: boolean
-): Promise<ScrapeResult> {
-  console.log('[Windows] Node.js でスクレイパーを実行します...');
-
-  const runnerPath = join(process.cwd(), 'src', 'scraper-runner.ts');
-  const configJson = JSON.stringify(searchConfig);
-
-  console.log('[DEBUG] Runner path:', runnerPath);
-  console.log('[DEBUG] Config:', configJson.substring(0, 100) + '...');
-
-  // Windows では npx.cmd を使う
-  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-
-  const result = spawnSync(npxCmd, ['tsx', runnerPath, configJson, String(headless)], {
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-    shell: false,  // shell: false で直接実行
-    cwd: process.cwd(),
-    timeout: 120000, // 2分タイムアウト
-    windowsHide: false,
-  });
-
-  console.log('[DEBUG] spawnSync completed');
-
-  if (result.error) {
-    return {
-      success: false,
-      found: false,
-      message: 'Node.js の実行に失敗しました',
-      error: result.error.message,
-    };
-  }
-
-  // 標準出力・エラー出力を取得
-  const stdout = result.stdout || '';
-  const stderr = result.stderr || '';
-
-  if (stdout) {
-    console.log('[stdout]', stdout);
-  }
-  if (stderr) {
-    console.error('[stderr]', stderr);
-  }
-  if (result.status !== 0) {
-    console.error('[exit code]', result.status);
-  }
-
-  const startMarker = '__RESULT_START__';
-  const endMarker = '__RESULT_END__';
-  const startIdx = stdout.indexOf(startMarker);
-  const endIdx = stdout.indexOf(endMarker);
-
-  if (startIdx === -1 || endIdx === -1) {
-    return {
-      success: false,
-      found: false,
-      message: 'スクレイパーの結果を取得できませんでした',
-      error: stderr || `Exit code: ${result.status}, No result markers found in output`,
-    };
-  }
-
-  const jsonStr = stdout.slice(startIdx + startMarker.length, endIdx).trim();
-  try {
-    return JSON.parse(jsonStr);
-  } catch {
-    return {
-      success: false,
-      found: false,
-      message: '結果のパースに失敗しました',
-      error: jsonStr,
-    };
-  }
-}
-
-/**
  * 都営住宅の空き物件を検索する
  */
 export async function searchAvailableProperty(
   searchConfig: SearchConfig,
   headless: boolean = true
 ): Promise<ScrapeResult> {
-  // Windows + Bun 環境では Node.js で実行
-  if (shouldUseNodeRunner()) {
-    return runWithNode(searchConfig, headless);
-  }
-
   // logsディレクトリを作成
   if (!existsSync(LOGS_DIR)) {
     mkdirSync(LOGS_DIR, { recursive: true });

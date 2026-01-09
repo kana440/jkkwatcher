@@ -1,34 +1,33 @@
-﻿@echo off
-@chcp 65001 > nul
-@echo ================================
-@echo   JKK Watcher セットアップ
-@echo ================================
-@echo.
+@echo off
+chcp 65001 > nul
+echo ================================
+echo   JKK Watcher セットアップ
+echo ================================
+echo.
 
-@REM Bunがインストールされているかチェック
-@where bun >nul 2>nul
-@if %errorlevel% neq 0 (
-    @echo [WARNING] Bunがインストールされていません
-    @echo [INFO] Bunを自動インストールします...
-    @powershell -c "irm bun.sh/install.ps1 | iex"
-    @echo [OK] Bunのインストールが完了しました
-    @echo.
+REM Node.jsがインストールされているかチェック
+where node >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [ERROR] Node.jsがインストールされていません
+    echo [INFO] https://nodejs.org/ からインストールしてください
+    pause
+    exit /b 1
 )
 
-@REM パッケージをインストール
-@echo [INFO] 依存パッケージをインストールしています...
-@call bun install >nul 2>&1
+REM パッケージをインストール
+echo [INFO] 依存パッケージをインストールしています...
+call npm install
 
-@REM Playwrightブラウザをインストール
-@echo [INFO] Playwrightブラウザをインストールしています...
-@call bunx playwright install chromium >nul 2>&1
+REM Playwrightブラウザをインストール
+echo [INFO] Playwrightブラウザをインストールしています...
+call npx playwright install chromium
 
-@echo.
-@echo [OK] セットアップ完了！
-@echo [INFO] JKK Watcherを起動します...
-@echo.
+echo.
+echo [OK] セットアップ完了！
+echo [INFO] JKK Watcherを起動します...
+echo.
 
-@REM アプリケーションを起動
-@call bun run index.ts
+REM アプリケーションを起動
+call npm start
 
-@pause
+pause
