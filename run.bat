@@ -15,30 +15,20 @@
     @echo.
 )
 
-@REM Node.jsがインストールされているかチェック（Playwright用）
-@where node >nul 2>nul
-@if %errorlevel% neq 0 (
-    @echo [WARNING] Node.jsがインストールされていません
-    @echo [INFO] PlaywrightにはNode.jsが必要です
-    @echo [INFO] https://nodejs.org/ からインストールしてください
-    @pause
-    @exit /b 1
-)
-
 @REM パッケージをインストール
 @echo [INFO] 依存パッケージをインストールしています...
 @call bun install >nul 2>&1
 
 @REM Playwrightブラウザをインストール
 @echo [INFO] Playwrightブラウザをインストールしています...
-@call npx playwright install chromium >nul 2>&1
+@call bunx playwright install chromium >nul 2>&1
 
 @echo.
 @echo [OK] セットアップ完了！
 @echo [INFO] JKK Watcherを起動します...
 @echo.
 
-@REM アプリケーションを起動（PlaywrightはNode.jsで実行）
-@call npx ts-node index.ts
+@REM アプリケーションを起動
+@call bun run index.ts
 
 @pause

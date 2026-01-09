@@ -2,6 +2,35 @@ import { chromium, Browser, Page } from 'playwright';
 import type { SearchConfig } from './config';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
+
+/**
+ * Playwrightがインストールしたブラウザのパスを取得
+ */
+function getChromiumExecutablePath(): string | undefined {
+  const isWindows = process.platform === 'win32';
+
+  if (isWindows) {
+    // Windowsの場合、Playwrightのデフォルトインストール先を確認
+    const localAppData = process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
+    const playwrightPath = join(localAppData, 'ms-playwright');
+
+    if (existsSync(playwrightPath)) {
+      // chromium-*ディレクトリを探す
+      const fs = require('fs');
+      const dirs = fs.readdirSync(playwrightPath).filter((d: string) => d.startsWith('chromium-'));
+      if (dirs.length > 0) {
+        const chromiumDir = dirs.sort().pop(); // 最新バージョンを使用
+        const exePath = join(playwrightPath, chromiumDir, 'chrome-win', 'chrome.exe');
+        if (existsSync(exePath)) {
+          return exePath;
+        }
+      }
+    }
+  }
+
+  return undefined; // 他のプラットフォームはPlaywrightの自動検出に任せる
+}
 
 export interface ScrapeResult {
   success: boolean;
@@ -32,9 +61,15 @@ export async function searchAvailableProperty(
   try {
     console.log('ブラウザを起動しています...');
 
+    const executablePath = getChromiumExecutablePath();
+    if (executablePath) {
+      console.log(`Chromiumパス: ${executablePath}`);
+    }
+
     browser = await chromium.launch({
       headless: headless,
       timeout: 30000,
+      executablePath: executablePath,
     });
 
     const context = await browser.newContext({
