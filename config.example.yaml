@@ -1,0 +1,31 @@
+# JKK Watcher 設定ファイル（サンプル）
+# このファイルをコピーして config.yaml として保存し、実際の値を設定してください
+
+# 監視間隔（秒）最小値: 60
+interval_seconds: 300
+
+# ヘッドレスモードで実行するか（true: バックグラウンド実行, false: ブラウザを表示）
+headless: true
+
+# Gmail設定（メール送信用）
+gmail:
+  user: your-email@gmail.com
+  password: your-app-password  # Googleアカウントの2段階認証を有効にし、アプリパスワードを生成してください
+
+# メール送信先設定
+recipients:
+  sender: your-email@gmail.com
+  to:
+    - recipient1@example.com
+    - recipient2@example.com  # 複数の送信先を指定可能
+
+# 検索条件
+search:
+  kana_name: マツ  # 物件名（カナ）
+  kaiso_from: '3'  # 希望階層
+  menseki_from: こだわらない  # 床面積（こだわらない, ２０, ３０, ４０, ５０, ６０, ７０, ８０, ９０, １００）
+  madori:
+    madori_1R1K_1LDK: false
+    madori_2K_2LDK: true
+    madori_3K_3LDK: true
+    madori_4K_up: false

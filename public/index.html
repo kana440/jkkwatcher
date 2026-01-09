@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JKK Watcher - 都営住宅監視システム</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+
+    .content {
+      padding: 30px;
+    }
+
+    .status-section {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .status-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.running {
+      background: #10b981;
+    }
+
+    .status-dot.stopped {
+      background: #6b7280;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-start {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-stop {
+      background: #ef4444;
+      color: white;
+    }
+
+    .btn-check {
+      background: #3b82f6;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .section {
+      margin-bottom: 30px;
+    }
+
+    .section h2 {
+      font-size: 20px;
+      margin-bottom: 15px;
+      color: #1f2937;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 5px;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .checkbox-group {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      width: auto;
+    }
+
+    .btn-save {
+      background: #667eea;
+      color: white;
+      width: 100%;
+      margin-top: 15px;
+    }
+
+    .logs {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      background: #f9fafb;
+      border-left: 4px solid #d1d5db;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+    }
+
+    .log-entry.found {
+      border-left-color: #10b981;
+      background: #ecfdf5;
+    }
+
+    .log-time {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+
+    .log-message {
+      font-size: 14px;
+      color: #1f2937;
+    }
+
+    .screenshot-link {
+      display: inline-block;
+      margin-top: 8px;
+      color: #3b82f6;
+      text-decoration: none;
+      font-size: 13px;
+    }
+
+    .screenshot-link:hover {
+      text-decoration: underline;
+    }
+
+    .info-text {
+      font-size: 13px;
+      color: #6b7280;
+      margin-top: 5px;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      max-width: 450px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal h3 {
+      margin: 0 0 15px 0;
+      font-size: 20px;
+      color: #1f2937;
+    }
+
+    .modal p {
+      margin: 0 0 20px 0;
+      font-size: 14px;
+      color: #6b7280;
+      line-height: 1.6;
+    }
+
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .modal-buttons button {
+      flex: 1;
+    }
+
+    .btn-warning {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>JKK Watcher</h1>
+      <p>都営住宅空き物件監視システム</p>
+    </div>
+
+    <div class="content">
+      <!-- ステータスセクション -->
+      <div class="status-section">
+        <div class="status-indicator">
+          <div class="status-dot" id="statusDot"></div>
+          <strong id="statusText">読み込み中...</strong>
+        </div>
+        <div id="statusDetails" style="font-size: 14px; color: #6b7280;"></div>
+        <div class="button-group">
+          <button class="btn-start" id="btnStart">▶ 監視開始</button>
+          <button class="btn-stop" id="btnStop">⏹ 停止</button>
+          <button class="btn-check" id="btnCheck">🔍 手動チェック</button>
+        </div>
+      </div>
+
+      <!-- 設定セクション -->
+      <div class="section">
+        <h2>⚙️ 設定</h2>
+        <form id="configForm">
+          <div class="form-group">
+            <label>Gmailアドレス</label>
+            <input type="email" id="gmailUser" required>
+          </div>
+          <div class="form-group">
+            <label>Gmailアプリパスワード</label>
+            <input type="password" id="gmailPassword" required>
+            <div class="info-text">※ Googleアカウントの2段階認証を有効にし、アプリパスワードを生成してください</div>
+          </div>
+          <div class="form-group">
+            <label>送信先メールアドレス（カンマ区切りで複数可）</label>
+            <input type="text" id="recipients" required>
+          </div>
+          <div class="form-group">
+            <label>物件名（カナ）</label>
+            <input type="text" id="kanaName" required>
+          </div>
+          <div class="form-group">
+            <label>希望階層</label>
+            <input type="text" id="kaisoFrom" required>
+          </div>
+          <div class="form-group">
+            <label>床面積</label>
+            <select id="mensekiFrom">
+              <option value="こだわらない">こだわらない</option>
+              <option value="２０">20㎡以上</option>
+              <option value="３０">30㎡以上</option>
+              <option value="４０">40㎡以上</option>
+              <option value="５０">50㎡以上</option>
+              <option value="６０">60㎡以上</option>
+              <option value="７０">70㎡以上</option>
+              <option value="８０">80㎡以上</option>
+              <option value="９０">90㎡以上</option>
+              <option value="１００">100㎡以上</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>間取り</label>
+            <div class="checkbox-group">
+              <div class="checkbox-item">
+                <input type="checkbox" id="madori1">
+                <label for="madori1" style="margin: 0;">1R/1K/1LDK</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="madori2">
+                <label for="madori2" style="margin: 0;">2K/2LDK</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="madori3">
+                <label for="madori3" style="margin: 0;">3K/3LDK</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="madori4">
+                <label for="madori4" style="margin: 0;">4K以上</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>監視間隔（秒）</label>
+            <input type="number" id="intervalSeconds" min="60" required>
+          </div>
+          <div class="form-group">
+            <label>ヘッドレスモードで実行</label>
+            <select id="headless">
+              <option value="false">No（ブラウザを表示）</option>
+              <option value="true">Yes（バックグラウンド実行）</option>
+            </select>
+            <div class="info-text">※ デバッグ時は「No」を選択するとブラウザの動作を確認できます</div>
+          </div>
+          <div class="form-group">
+            <label>ブラウザを閉じたらサーバーも停止</label>
+            <select id="autoShutdown">
+              <option value="false">No（サーバーは実行し続ける）</option>
+              <option value="true">Yes（ブラウザを閉じたら停止）</option>
+            </select>
+            <div class="info-text">※ 「Yes」を選択すると、全てのブラウザを閉じたときにサーバーも自動的に停止します</div>
+          </div>
+          <button type="submit" class="btn-save">💾 設定を保存</button>
+        </form>
+      </div>
+
+      <!-- ログセクション -->
+      <div class="section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+          <h2 style="margin: 0;">📋 実行履歴</h2>
+          <button id="btnClearLogs" style="flex: none; padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer;">
+            🗑️ クリア
+          </button>
+        </div>
+        <div class="info-text" style="margin-bottom: 10px;">
+          ※ ヒットなしのログは最長1日間のみ保持されます
+        </div>
+        <div class="logs" id="logsContainer">
+          <p style="color: #6b7280; text-align: center;">ログがありません</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 未保存の変更確認モーダル -->
+  <div class="modal-overlay" id="unsavedModal">
+    <div class="modal">
+      <h3>⚠️ 未保存の変更があります</h3>
+      <p>設定が変更されていますが、まだ保存されていません。<br><br>
+      <strong>変更して実行:</strong> 現在の設定値で手動チェックを実行します（設定ファイルは更新されません）<br><br>
+      <strong>キャンセル:</strong> 設定を保存してから再度実行してください</p>
+      <div class="modal-buttons">
+        <button class="btn-secondary" id="btnModalCancel">キャンセル</button>
+        <button class="btn-warning" id="btnModalExecute">⚡ 変更して実行</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let hasUnsavedChanges = false;
+    let originalConfigJson = '';
+    let ws = null;
+    let reconnectTimeout = null;
+
+    // 設定変更を検知
+    function checkForChanges() {
+      const currentConfigJson = JSON.stringify(getCurrentFormConfig());
+      hasUnsavedChanges = currentConfigJson !== originalConfigJson;
+    }
+
+    // 現在のフォームから設定を取得
+    function getCurrentFormConfig() {
+      return {
+        interval_seconds: parseInt(document.getElementById('intervalSeconds').value),
+        headless: document.getElementById('headless').value === 'true',
+        auto_shutdown: document.getElementById('autoShutdown').value === 'true',
+        gmail: {
+          user: document.getElementById('gmailUser').value,
+          password: document.getElementById('gmailPassword').value,
+        },
+        recipients: {
+          sender: document.getElementById('gmailUser').value,
+          to: document.getElementById('recipients').value.split(',').map(s => s.trim()),
+        },
+        search: {
+          kana_name: document.getElementById('kanaName').value,
+          kaiso_from: document.getElementById('kaisoFrom').value,
+          menseki_from: document.getElementById('mensekiFrom').value,
+          madori: {
+            madori_1R1K_1LDK: document.getElementById('madori1').checked,
+            madori_2K_2LDK: document.getElementById('madori2').checked,
+            madori_3K_3LDK: document.getElementById('madori3').checked,
+            madori_4K_up: document.getElementById('madori4').checked,
+          },
+        },
+      };
+    }
+
+    // ステータスを更新
+    async function updateStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/status`);
+        const status = await res.json();
+
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        const details = document.getElementById('statusDetails');
+
+        if (status.isRunning) {
+          dot.className = 'status-dot running';
+          text.textContent = '監視中';
+          document.getElementById('btnStart').disabled = true;
+          document.getElementById('btnStop').disabled = false;
+        } else {
+          dot.className = 'status-dot stopped';
+          text.textContent = '停止中';
+          document.getElementById('btnStart').disabled = false;
+          document.getElementById('btnStop').disabled = true;
+        }
+
+        let detailsHtml = `総チェック回数: ${status.totalChecks}回`;
+        if (status.lastCheckTime) {
+          detailsHtml += `<br>最終チェック: ${new Date(status.lastCheckTime).toLocaleString('ja-JP')}`;
+        }
+        if (status.lastResult) {
+          detailsHtml += `<br>結果: ${status.lastResult}`;
+        }
+        details.innerHTML = detailsHtml;
+      } catch (error) {
+        console.error('ステータス取得エラー:', error);
+      }
+    }
+
+    // 設定を読み込み
+    async function loadConfig() {
+      try {
+        const res = await fetch(`${API_BASE}/api/config`);
+        const config = await res.json();
+
+        document.getElementById('gmailUser').value = config.gmail.user;
+        document.getElementById('gmailPassword').value = config.gmail.password;
+        document.getElementById('recipients').value = config.recipients.to.join(', ');
+        document.getElementById('kanaName').value = config.search.kana_name;
+        document.getElementById('kaisoFrom').value = config.search.kaiso_from;
+        document.getElementById('mensekiFrom').value = config.search.menseki_from;
+        document.getElementById('madori1').checked = config.search.madori.madori_1R1K_1LDK;
+        document.getElementById('madori2').checked = config.search.madori.madori_2K_2LDK;
+        document.getElementById('madori3').checked = config.search.madori.madori_3K_3LDK;
+        document.getElementById('madori4').checked = config.search.madori.madori_4K_up;
+        document.getElementById('intervalSeconds').value = config.interval_seconds;
+        document.getElementById('headless').value = String(config.headless ?? false);
+        document.getElementById('autoShutdown').value = String(config.auto_shutdown ?? false);
+
+        // 読み込んだ設定を保存
+        originalConfigJson = JSON.stringify(config);
+        hasUnsavedChanges = false;
+      } catch (error) {
+        console.error('設定読み込みエラー:', error);
+      }
+    }
+
+    // ログを読み込み
+    let currentLogPage = 0;
+    const LOGS_PER_PAGE = 10;
+    let allLogs = [];
+
+    async function loadLogs() {
+      try {
+        const res = await fetch(`${API_BASE}/api/logs?limit=100`);
+        allLogs = await res.json();
+        currentLogPage = 0;
+        displayLogs();
+      } catch (error) {
+        console.error('ログ読み込みエラー:', error);
+      }
+    }
+
+    function displayLogs() {
+      const container = document.getElementById('logsContainer');
+
+      if (allLogs.length === 0) {
+        container.innerHTML = '<p style="color: #6b7280; text-align: center;">ログがありません</p>';
+        return;
+      }
+
+      const start = currentLogPage * LOGS_PER_PAGE;
+      const end = start + LOGS_PER_PAGE;
+      const logsToDisplay = allLogs.slice(start, end);
+
+      const logsHtml = logsToDisplay.map(log => `
+        <div class="log-entry ${log.found ? 'found' : ''}">
+          <div class="log-time">${new Date(log.timestamp).toLocaleString('ja-JP')}</div>
+          <div class="log-message">${log.message}</div>
+          ${log.screenshotPath ? `<a href="/api/screenshot/${log.screenshotPath.split('/').pop()}" target="_blank" class="screenshot-link">📸 スクリーンショットを表示</a>` : ''}
+        </div>
+      `).join('');
+
+      const totalPages = Math.ceil(allLogs.length / LOGS_PER_PAGE);
+      const paginationHtml = totalPages > 1 ? `
+        <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 15px;">
+          <button id="btnPrevPage" ${currentLogPage === 0 ? 'disabled' : ''} style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; ${currentLogPage === 0 ? 'opacity: 0.5; cursor: not-allowed;' : ''}">← 前へ</button>
+          <span style="font-size: 13px; color: #6b7280;">${currentLogPage + 1} / ${totalPages} ページ (全${allLogs.length}件)</span>
+          <button id="btnNextPage" ${currentLogPage >= totalPages - 1 ? 'disabled' : ''} style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; ${currentLogPage >= totalPages - 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}">次へ →</button>
+        </div>
+      ` : `<div style="text-align: center; margin-top: 10px; font-size: 13px; color: #6b7280;">全${allLogs.length}件</div>`;
+
+      container.innerHTML = logsHtml + paginationHtml;
+
+      // ページネーションボタンのイベントハンドラー
+      if (totalPages > 1) {
+        document.getElementById('btnPrevPage')?.addEventListener('click', () => {
+          if (currentLogPage > 0) {
+            currentLogPage--;
+            displayLogs();
+          }
+        });
+        document.getElementById('btnNextPage')?.addEventListener('click', () => {
+          if (currentLogPage < totalPages - 1) {
+            currentLogPage++;
+            displayLogs();
+          }
+        });
+      }
+    }
+
+    // 監視開始
+    document.getElementById('btnStart').addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/start`, { method: 'POST' });
+        const result = await res.json();
+        alert(result.message);
+        updateStatus();
+      } catch (error) {
+        alert('監視の開始に失敗しました');
+      }
+    });
+
+    // 監視停止
+    document.getElementById('btnStop').addEventListener('click', async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/stop`, { method: 'POST' });
+        const result = await res.json();
+        alert(result.message);
+        updateStatus();
+      } catch (error) {
+        alert('監視の停止に失敗しました');
+      }
+    });
+
+    // 手動チェック
+    document.getElementById('btnCheck').addEventListener('click', async () => {
+      checkForChanges();
+
+      if (hasUnsavedChanges) {
+        // 未保存の変更がある場合はモーダルを表示
+        document.getElementById('unsavedModal').classList.add('show');
+      } else {
+        // 変更がない場合は通常の手動チェック
+        await executeCheck();
+      }
+    });
+
+    // モーダル - キャンセルボタン
+    document.getElementById('btnModalCancel').addEventListener('click', () => {
+      document.getElementById('unsavedModal').classList.remove('show');
+    });
+
+    // モーダル - 変更して実行ボタン
+    document.getElementById('btnModalExecute').addEventListener('click', async () => {
+      document.getElementById('unsavedModal').classList.remove('show');
+      await executeCheckWithChanges();
+    });
+
+    // 手動チェックを実行（保存済み設定を使用）
+    async function executeCheck() {
+      try {
+        const res = await fetch(`${API_BASE}/api/check`, { method: 'POST' });
+        const result = await res.json();
+        alert(result.message);
+        setTimeout(() => {
+          updateStatus();
+          loadLogs();
+        }, 2000);
+      } catch (error) {
+        alert('チェックの実行に失敗しました');
+      }
+    }
+
+    // 手動チェックを実行（現在の設定を使用、保存しない）
+    async function executeCheckWithChanges() {
+      try {
+        const config = getCurrentFormConfig();
+
+        // フロントエンド側でのバリデーション
+        if (!config.gmail.user || !config.gmail.password) {
+          alert('Gmail設定が不正です');
+          return;
+        }
+        if (!config.recipients.sender || config.recipients.to.length === 0) {
+          alert('メール送信先設定が不正です');
+          return;
+        }
+        if (!config.search.kana_name) {
+          alert('検索条件（物件名）が不正です');
+          return;
+        }
+        if (config.interval_seconds < 60) {
+          alert('監視間隔は60秒以上に設定してください');
+          return;
+        }
+
+        const res = await fetch(`${API_BASE}/api/check-with-config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        const result = await res.json();
+
+        if (res.ok) {
+          alert(result.message);
+          setTimeout(() => {
+            updateStatus();
+            loadLogs();
+          }, 2000);
+        } else {
+          alert(`エラー: ${result.error}`);
+        }
+      } catch (error) {
+        alert('チェックの実行に失敗しました: ' + (error instanceof Error ? error.message : String(error)));
+      }
+    }
+
+    // 設定保存
+    document.getElementById('configForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const config = {
+        interval_seconds: parseInt(document.getElementById('intervalSeconds').value),
+        headless: document.getElementById('headless').value === 'true',
+        auto_shutdown: document.getElementById('autoShutdown').value === 'true',
+        gmail: {
+          user: document.getElementById('gmailUser').value,
+          password: document.getElementById('gmailPassword').value,
+        },
+        recipients: {
+          sender: document.getElementById('gmailUser').value,
+          to: document.getElementById('recipients').value.split(',').map(s => s.trim()),
+        },
+        search: {
+          kana_name: document.getElementById('kanaName').value,
+          kaiso_from: document.getElementById('kaisoFrom').value,
+          menseki_from: document.getElementById('mensekiFrom').value,
+          madori: {
+            madori_1R1K_1LDK: document.getElementById('madori1').checked,
+            madori_2K_2LDK: document.getElementById('madori2').checked,
+            madori_3K_3LDK: document.getElementById('madori3').checked,
+            madori_4K_up: document.getElementById('madori4').checked,
+          },
+        },
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+
+        if (res.ok) {
+          alert('設定を保存しました');
+          // 保存後、originalConfigJsonを更新
+          originalConfigJson = JSON.stringify(config);
+          hasUnsavedChanges = false;
+        } else {
+          const error = await res.json();
+          alert(`エラー: ${error.error}`);
+        }
+      } catch (error) {
+        alert('設定の保存に失敗しました');
+      }
+    });
+
+    // ログクリアボタン
+    document.getElementById('btnClearLogs').addEventListener('click', async () => {
+      if (!confirm('実行履歴をすべてクリアしますか？この操作は取り消せません。')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/logs`, { method: 'DELETE' });
+        const result = await res.json();
+        if (res.ok) {
+          alert(result.message);
+          loadLogs();
+        } else {
+          alert(`エラー: ${result.error}`);
+        }
+      } catch (error) {
+        alert('ログのクリアに失敗しました');
+      }
+    });
+
+    // フォームの変更を監視
+    document.getElementById('configForm').addEventListener('input', checkForChanges);
+
+    // WebSocket接続を確立
+    function connectWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        console.log('WebSocket接続確立');
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          handleWebSocketMessage(message);
+        } catch (error) {
+          console.error('WebSocketメッセージ処理エラー:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocketエラー:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket接続切断');
+        // 自動再接続
+        reconnectTimeout = setTimeout(() => {
+          console.log('WebSocket再接続を試行中...');
+          connectWebSocket();
+        }, 3000);
+      };
+    }
+
+    // WebSocketメッセージを処理
+    function handleWebSocketMessage(message) {
+      console.log('WebSocketメッセージ受信:', message);
+
+      switch (message.type) {
+        case 'initial_state':
+          // 初期状態を受信
+          updateStatusFromData(message.data.status);
+          displayLogsFromData(message.data.logs);
+          break;
+
+        case 'status_update':
+          // ステータス更新
+          updateStatusFromData(message.data);
+          break;
+
+        case 'log_added':
+          // 新しいログが追加された
+          prependLog(message.data);
+          break;
+
+        case 'progress':
+          // 進行状況の更新
+          showProgress(message.data);
+          break;
+
+        case 'notification':
+          // 通知を表示
+          showNotification(message.data);
+          break;
+
+        case 'pong':
+          // Ping応答
+          break;
+
+        default:
+          console.warn('未知のメッセージタイプ:', message.type);
+      }
+    }
+
+    // ステータスをデータから更新
+    function updateStatusFromData(status) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      const details = document.getElementById('statusDetails');
+
+      if (status.isRunning) {
+        dot.className = 'status-dot running';
+        text.textContent = '監視中';
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled = false;
+      } else {
+        dot.className = 'status-dot stopped';
+        text.textContent = '停止中';
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+      }
+
+      let detailsHtml = `総チェック回数: ${status.totalChecks}回`;
+      if (status.lastCheckTime) {
+        detailsHtml += `<br>最終チェック: ${new Date(status.lastCheckTime).toLocaleString('ja-JP')}`;
+      }
+      if (status.lastResult) {
+        detailsHtml += `<br>結果: ${status.lastResult}`;
+      }
+      details.innerHTML = detailsHtml;
+    }
+
+    // ログをデータから表示
+    function displayLogsFromData(logs) {
+      allLogs = logs;
+      currentLogPage = 0;
+      displayLogs();
+    }
+
+    // 新しいログを先頭に追加
+    function prependLog(log) {
+      allLogs.unshift(log);
+      currentLogPage = 0;
+      displayLogs();
+    }
+
+    // 進行状況を表示
+    function showProgress(data) {
+      const details = document.getElementById('statusDetails');
+      const currentHtml = details.innerHTML;
+      details.innerHTML = currentHtml + `<br><small style="color: #3b82f6;">▶ ${data.message}</small>`;
+
+      // 3秒後に進行状況メッセージを削除
+      setTimeout(() => {
+        if (details.innerHTML.includes(data.message)) {
+          details.innerHTML = currentHtml;
+        }
+      }, 3000);
+    }
+
+    // ブラウザ通知を表示
+    function showNotification(data) {
+      // デスクトップ通知
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('JKK Watcher', {
+          body: data.message,
+          icon: data.type === 'success' ? '✅' : data.type === 'error' ? '❌' : 'ℹ️',
+        });
+      }
+
+      // アラートでも表示
+      if (data.type === 'success') {
+        alert('🎉 ' + data.message);
+      }
+    }
+
+    // 通知権限をリクエスト
+    function requestNotificationPermission() {
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+
+    // 初期化
+    loadConfig();
+    updateStatus();
+    loadLogs();
+    connectWebSocket();
+    requestNotificationPermission();
+
+    // フォールバック: WebSocket接続できない場合に備えてポーリングも残す（頻度を下げる）
+    setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // WebSocketが切断されている場合のみポーリング
+        updateStatus();
+        loadLogs();
+      }
+    }, 30000); // 30秒に1回（元の5秒から増やす）
+  </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "jkkwatcher-new",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/js-yaml": "^4.0.9",
+    "@types/nodemailer": "^7.0.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1",
+    "nodemailer": "^7.0.12",
+    "playwright": "^1.57.0"
+  }
+}
