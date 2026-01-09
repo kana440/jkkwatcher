@@ -53,9 +53,19 @@ async function runWithNode(
     };
   }
 
-  // 標準出力から結果を抽出
+  // 標準出力・エラー出力を取得
   const stdout = result.stdout || '';
-  console.log(stdout);
+  const stderr = result.stderr || '';
+
+  if (stdout) {
+    console.log('[stdout]', stdout);
+  }
+  if (stderr) {
+    console.error('[stderr]', stderr);
+  }
+  if (result.status !== 0) {
+    console.error('[exit code]', result.status);
+  }
 
   const startMarker = '__RESULT_START__';
   const endMarker = '__RESULT_END__';
@@ -67,7 +77,7 @@ async function runWithNode(
       success: false,
       found: false,
       message: 'スクレイパーの結果を取得できませんでした',
-      error: result.stderr || 'No result markers found',
+      error: stderr || `Exit code: ${result.status}, No result markers found in output`,
     };
   }
 

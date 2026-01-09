@@ -1,8 +1,8 @@
 import { loadConfig } from './config';
 import { searchAvailableProperty } from './scraper';
 import { sendNotification } from './notifier';
-import { writeFileSync, readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 
 export interface WatcherStatus {
   isRunning: boolean;
@@ -254,6 +254,10 @@ export function getStatus(): WatcherStatus {
  */
 function saveStatus(): void {
   try {
+    const dir = dirname(STATUS_FILE);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
     writeFileSync(STATUS_FILE, JSON.stringify(currentStatus, null, 2), 'utf8');
   } catch (error) {
     console.error('ステータスの保存に失敗:', error);
@@ -265,6 +269,11 @@ function saveStatus(): void {
  */
 export function addLog(entry: LogEntry): void {
   try {
+    const dir = dirname(LOG_FILE);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+
     let logs: LogEntry[] = [];
 
     if (existsSync(LOG_FILE)) {
